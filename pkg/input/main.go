@@ -1,18 +1,20 @@
 package input
 
 import (
-	"github.com/bitsnops/go-valifieldator"
+	structvalidator "github.com/mikolajgasior/struct-validator"
 	_ "gopkg.in/yaml.v2"
 )
 
 type Input struct {
-	Name         string `yaml:"name" validation_regexp:"^[0-9a-zA-Z_]{2,50}$"`
-	Description  string `yaml:"description" validation:"lenmax:240"`
-	Required     bool   `yaml:"required"`
-	DefaultValue string `yaml:"defaultValue"`
+	Name        string `yaml:"name" validation_regexp:"^[0-9a-zA-Z_]{2,50}$"`
+	Description string `yaml:"description" validation:"lenmax:240"`
+	Required    bool   `yaml:"required"`
+	Default     string `yaml:"default"`
+	RegExp      string `yaml:"regexp"`
+	RunValue    string `yaml:"value"`
 }
 
 func (i *Input) Validate() (bool, map[string]int) {
-	isValid, failedFields := valifieldator.Validate(i, &valifieldator.ValidationOptions{})
+	isValid, failedFields := structvalidator.Validate(i, &structvalidator.ValidationOptions{})
 	return isValid, failedFields
 }

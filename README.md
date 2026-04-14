@@ -1,47 +1,96 @@
-# streamline
+# Charlotte Workflow Runner (PoC)
 
-#### Latest state
-It's been copied from a different repository so it's probably failing to
-compile.
+A lightweight proof-of-concept workflow execution engine written in Go. This project demonstrates a minimal approach to
+orchestrating bash script workflows defined in YAML configuration files, with the unique ability to execute steps across
+different environments seamlessly.
 
-Docker bit is under development so no idea what's there TBH.
+## Overview
 
-#### Building
-Use the following:
+This is a hobby/experimental project that provides:
 
-    cd cmd/ops-run
+* YAML-defined workflows: Describe your automation steps in a simple YAML format.
+* Multi-environment Execution: Run steps locally, inside a Docker container, or on a Kubernetes cluster.
+* Basic logic flow: Simple conditional logic and step sequencing.
+* Input/output handling: Pass data between workflow steps.
+
+Think of it as a stripped-down, self-hosted alternative to GitHub Actions — built for learning and experimentation 
+rather than production use.
+
+One of the core experiments in this project is the ability to define where a step runs without changing the script logic
+itself.
+
+* Local: Executes directly on the host machine.
+* Docker: Spins up a temporary container for the step.
+* Kubernetes: Deploys a Job to a configured K8s cluster.
+
+## Example job YAML
+
+```yaml
+name: Test
+description: Workflow with bash script steps
+inputs:
+  input_1:
+    required: true
+  input_2:
+    required: true
+    regexp: ^[A-Za-z0-9]+$
+outputs:
+  output_1:
+    value: '{{ .StepOutputs.step_1.output_1 }}'
+  output_2:
+    value: '{{ .StepOutputs.step_1.output_2 }}'
+steps:
+  - type: shell
+    name: Step 1
+    id: step_1
+    description: Simple test step
+    script: |
+      echo "Step1 Standard Output Message: {{ .Inputs.input_1 }}";
+      >&2 echo "Step1 Standard Error Message: {{ .Inputs.input_2 }} ";
+      echo -n "output1" > $OUTPUTS_DIR/output_1
+      echo -n "output2" > $OUTPUTS_DIR/output_2
+````
+
+## Running test suite
+
+    make test
+
+## Building binary
+
+    cd cmd/job
     go build .
 
-#### Testing
-Use the following:
+## Running
 
-    ./ops-run run-job -f ../../sample-files/job.yaml
+    cd cmd/job
+    ./job run-local -j ../../sample-files/job.yaml \
+      -r /tmp/job-result.txt \
+      -i ../../sample-files/job-inputs.json \
+      --quiet
+    cat /tmp/job-result.txt
 
+Also, there are test files in the `pkg/job/runtime/local/tests` directory that can be used.
 
-#### Phase 0
-Phase 0 is to get something running simple bash scripts, with some simple
-dependencies between steps, some logic, piping standard output and error.
-And all that should be possible to execute locally, in a specific
-container or on a specified kubernetes cluster.
+## Features
 
-It should be possible to create job specification in YAML.
+- [x] pipe stdout and stderr to files
+- [x] environment (global and in-step)
+- [x] variables
+- [x] job inputs
+- [x] step outputs
+- [x] `continue_on_error`
+- [x] values using golang templates
+- [x] `if` - conditional steps (value templated, must equal to string `'true'`)
+- [x] running step(s) on success
+- [x] running step(s) on failure
+- [x] running step(s) always
+- [x] tmp directory for step outputs
+- [x] gather job outputs 
+- [x] write job outputs to json file
+- [x] handle input: `--inputs`, `--job`, `--result` without aliases (and `--quiet`)
+- [x] prepare sample yaml files - same as the test ones, so the test would just include them?
 
-Once each phase is done, we shall ensure it's all covered with tests, even
-if we have to write 50 or so of these guys.
-
-
-## TODO
-
-### Phase 0.1 - bash script blocks only
-#### 0.1.1 run them locally
-#### 0.1.2 spin a docker container and run inside
-#### 0.1.3 spin a pod in a kubernetes cluster
-#### 0.1.4 pipe stdout and stderr properly
-#### 0.1.5 add outputs
-#### 0.1.6 add inputs
-
-### Phase 0.2 - dependencies and handling logic
-...
-### Phase 0.3 - master <-?-> master (worker) <-> worker
-...
-
+## Future features
+- [ ] validation
+- [ ] extract steps so that they can be included (include file with inputs) + proper validation for that
+- [ ] pipelines

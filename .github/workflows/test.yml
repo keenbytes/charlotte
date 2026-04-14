@@ -1,0 +1,30 @@
+---
+name: Test
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run tests
+        shell: bash
+        run: |
+          make test
+
+      - name: Build binary
+        shell: bash
+        run: |
+          cd cmd/job
+          go build .
+          ./job

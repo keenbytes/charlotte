@@ -3,60 +3,74 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/mikolajgasior/charlotte/pkg/job"
-	jobrun "github.com/mikolajgasior/charlotte/pkg/jobrun"
-	localruntime "github.com/mikolajgasior/charlotte/pkg/runtime/local"
 	"os"
 
-	"github.com/mikolajgasior/broccli/v3"
+	"charlotte/internal/job"
+	jobrun "charlotte/internal/jobrun"
+	localruntime "charlotte/internal/runtime/local"
+	"github.com/spf13/cobra"
 )
 
 func main() {
-	cli := broccli.NewCLI("job", "Run job locally", "Streamln <hello@streamln.dev>")
-	cmdRun := cli.AddCmd("run-local", "Runs YAML job file", runJobHandler)
-	cmdRun.AddFlag("job", "j", "FILENAME", "Path to filename with a job", broccli.TypePathFile, broccli.IsRequired|broccli.IsExistent|broccli.IsRegularFile)
-	cmdRun.AddFlag("inputs", "i", "FILENAME", "Path to file containing input values", broccli.TypePathFile, broccli.IsRequired|broccli.IsExistent|broccli.IsRegularFile)
-	cmdRun.AddFlag("quiet", "q", "", "Do not print step stdout and stderr", broccli.TypeBool, 0, broccli.OnTrue(func(c *broccli.Cmd) {
+	rootCmd := &cobra.Command{
+		Use:   "job",
+		Short: "Run job locally",
+	}
 
-	}))
-	cmdRun.AddFlag("result", "r", "FILENAME", "Path to write JSON result", broccli.TypePathFile, 0)
-	_ = cli.AddCmd("version", "Prints version", versionHandler)
+	runLocalCmd := &cobra.Command{
+		Use:   "run-local",
+		Short: "Runs YAML job file",
+		RunE:  runJobHandler,
+	}
+
+	runLocalCmd.Flags().StringP("job", "j", "", "Path to filename with a job")
+	_ = runLocalCmd.MarkFlagRequired("job")
+	runLocalCmd.Flags().StringP("inputs", "i", "", "Path to file containing input values")
+	_ = runLocalCmd.MarkFlagRequired("inputs")
+	runLocalCmd.Flags().BoolP("quiet", "q", false, "Do not print step stdout and stderr")
+	runLocalCmd.Flags().StringP("result", "r", "", "Path to write JSON result")
+
+	rootCmd.AddCommand(runLocalCmd)
+
+	versionCmd := &cobra.Command{
+		Use:   "version",
+		Short: "Prints version",
+		Run:   versionHandler,
+	}
+	rootCmd.AddCommand(versionCmd)
+
 	if len(os.Args) == 2 && (os.Args[1] == "-v" || os.Args[1] == "--version") {
 		os.Args = []string{"App", "version"}
 	}
-	os.Exit(cli.Run())
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
 
-func versionHandler(c *broccli.CLI) int {
-	fmt.Fprintf(os.Stdout, VERSION+"\n")
-	return 0
+func versionHandler(cmd *cobra.Command, args []string) {
+	fmt.Fprintln(os.Stdout, VERSION)
 }
 
-func runJobHandler(c *broccli.CLI) int {
-	jobFile := c.Flag("job")
+func runJobHandler(cmd *cobra.Command, args []string) error {
+	jobFile, _ := cmd.Flags().GetString("job")
 	j, err := job.NewFromFile(jobFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error parsing job from file %s: %s\n", jobFile, err.Error())
-		return 1
+		return fmt.Errorf("error parsing job from file %s: %w", jobFile, err)
 	}
 
-	inputsFile := c.Flag("inputs")
+	inputsFile, _ := cmd.Flags().GetString("inputs")
 	b, err := os.ReadFile(inputsFile)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading inputs file %s: %s\n", inputsFile, err.Error())
-		return 1
+		return fmt.Errorf("error reading inputs file %s: %w", inputsFile, err)
 	}
+
 	var jobRunInputs jobrun.JobRunInputs
 	err = json.Unmarshal(b, &jobRunInputs)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error unmarshalling inputs file %s: %s\n", inputsFile, err.Error())
-		return 1
+		return fmt.Errorf("error unmarshalling inputs file %s: %w", inputsFile, err)
 	}
 
-	quiet := false
-	if c.Flag("quiet") == "true" {
-		quiet = true
-	}
+	quiet, _ := cmd.Flags().GetBool("quiet")
 	runenv := localruntime.NewLocalRuntime(quiet)
 	jobRunResult := j.Run(runenv, &jobRunInputs)
 	if !quiet && !jobRunResult.Success {
@@ -68,25 +82,25 @@ func runJobHandler(c *broccli.CLI) int {
 		if !quiet {
 			fmt.Fprintf(os.Stdout, "Marshalling run result to JSON failed\n")
 		}
-		return 4
+		return err
 	}
 
-	outputFile := c.Flag("result")
+	outputFile, _ := cmd.Flags().GetString("result")
 	if outputFile != "" {
 		err = os.WriteFile(outputFile, resultJson, 0600)
 		if err != nil {
 			if !quiet {
 				fmt.Fprintf(os.Stdout, "Writing JSON run result to file failed\n")
 			}
-			return 5
+			return err
 		}
 	} else {
-		fmt.Fprintf(os.Stdout, "%s", resultJson)
+		fmt.Fprintln(os.Stdout, string(resultJson))
 	}
 
 	if !jobRunResult.Success {
-		return 1
+		return fmt.Errorf("job execution failed")
 	}
 
-	return 0
+	return nil
 }

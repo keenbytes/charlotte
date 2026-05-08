@@ -1,7 +1,7 @@
 package shellstep
 
 import (
-	structvalidator "github.com/keenbytes/struct-validator"
+	structvalidator "github.com/mikolajgasior/struct-validator"
 )
 
 type ShellStep struct {
